@@ -4,44 +4,43 @@ package GoRio
 import (
 	"bufio"
 	"fmt"
-	"github.com/KunBetter/GoRio/LinkedTrie"
 	"io"
 	"os"
 	"strings"
 )
 
-type WordSeg struct {
-	word  string
-	resp  chan map[int]string
-	smart bool
+type WordReq struct {
+	Word  string
+	Resp  chan []Token
+	Smart bool
 }
 
 type GoRio struct {
 	DicFilesName []string
-	ForwardTrie  *LinkedTrie.LinkedTrie
-	ReverseTrie  *LinkedTrie.LinkedTrie
-	req          chan *WordSeg
+	ForwardTrie  *SliceTrie
+	Req          chan *WordReq
+	WordCount    int
 }
 
 func GoRior() *GoRio {
 	rio := &GoRio{
 		DicFilesName: []string{},
-		ForwardTrie:  LinkedTrie.NewLinkedTrie(),
-		ReverseTrie:  LinkedTrie.NewLinkedTrie(),
-		req:          make(chan *WordSeg, 10),
+		ForwardTrie:  NewSliceTrie(),
+		Req:          make(chan *WordReq, 100),
+		WordCount:    1,
 	}
-	go rio.process()
+	go rio.Process()
 	return rio
 }
 
-func (rio *GoRio) process() {
+func (rio *GoRio) Process() {
 	for {
 		select {
-		case ws := <-rio.req:
-			go func(ws *WordSeg) {
-				if !ws.smart {
-					segs := rio.MaxSegments(ws.word)
-					ws.resp <- segs
+		case ws := <-rio.Req:
+			go func(ws *WordReq) {
+				if !ws.Smart {
+					tokens := rio.MaxSegments(ws.Word)
+					ws.Resp <- tokens
 				}
 			}(ws)
 		}
@@ -57,36 +56,23 @@ func (rio *GoRio) Start() {
 		fmt.Println("no dic files.")
 		return
 	}
-	id := 1
 	for _, fn := range rio.DicFilesName {
-		id = rio.LoadDicFiles(fn, id)
+		rio.LoadDicFiles(fn)
 	}
 }
 
-func (rio *GoRio) CutWord(word string, smart bool) map[int]string {
-	ws := &WordSeg{
-		word:  word,
-		resp:  make(chan map[int]string),
-		smart: smart,
+func (rio *GoRio) CutWord(word string, smart bool) []Token {
+	ws := &WordReq{
+		Word:  word,
+		Resp:  make(chan []Token),
+		Smart: smart,
 	}
-	rio.req <- ws
-	return <-ws.resp
+	rio.Req <- ws
+	return <-ws.Resp
 }
 
-func (rio *GoRio) MaxSegments(word string) map[int]string {
-	segs := make(map[int]string)
-	fWords, fIDs := rio.ForwardTrie.MaxSegments(word)
-	for i := 0; i < len(fIDs); i++ {
-		segs[fIDs[i]] = fWords[i]
-	}
-	rWords, rIDs := rio.ReverseTrie.MaxSegments(Reverse(word))
-	for i := 0; i < len(fIDs); i++ {
-		_, ok := segs[rIDs[i]]
-		if !ok {
-			segs[rIDs[i]] = Reverse(rWords[i])
-		}
-	}
-	return segs
+func (rio *GoRio) MaxSegments(word string) []Token {
+	return rio.ForwardTrie.MaxSegments(word)
 }
 
 func Reverse(s string) string {
@@ -97,8 +83,12 @@ func Reverse(s string) string {
 	return string(runes)
 }
 
-func (rio *GoRio) LoadDicFiles(fn string, id int) int {
-	tid := id
+func (rio *GoRio) AddWork(word string) {
+	rio.ForwardTrie.AddWord(word, rio.WordCount)
+	rio.WordCount++
+}
+
+func (rio *GoRio) LoadDicFiles(fn string) {
 	f, err := os.Open(fn)
 	defer f.Close()
 	if nil == err {
@@ -109,10 +99,7 @@ func (rio *GoRio) LoadDicFiles(fn string, id int) int {
 				break
 			}
 			line = strings.TrimRight(line, "\r\n")
-			rio.ForwardTrie.AddWord(line, tid)
-			rio.ReverseTrie.AddWord(Reverse(line), tid)
-			tid++
+			rio.AddWork(line)
 		}
 	}
-	return tid
 }
