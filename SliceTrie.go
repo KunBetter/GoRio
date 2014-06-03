@@ -1,96 +1,113 @@
 // SliceTrie
 package GoRio
 
-import (
-	"unicode/utf8"
-)
+import ()
 
 type SliceTrieNode struct {
 	Key    byte
-	ID     int
 	Childs []*SliceTrieNode
 	Flag   bool
+	Token  *Token
 }
 
-func NewSliceTrieNode(key byte, id int) *SliceTrieNode {
+func NewSliceTrieNode(key byte) *SliceTrieNode {
 	node := &SliceTrieNode{
 		Key:    key,
-		ID:     id,
 		Childs: []*SliceTrieNode{},
 		Flag:   false,
+		Token:  nil,
 	}
 	return node
 }
 
-//***************LinkedTrie****************
+//***************Trie****************
 
 type SliceTrie struct {
-	Root *SliceTrieNode
+	Root      *SliceTrieNode
+	MaxWeight *TopoNode
 }
 
 //***************PUBLIC****************
 
 func NewSliceTrie() *SliceTrie {
 	trie := &SliceTrie{
-		Root: NewSliceTrieNode(0, -1),
+		Root:      NewSliceTrieNode(0),
+		MaxWeight: NewTopoNode(0),
 	}
 	return trie
 }
 
-func (trie *SliceTrie) AddWord(word string, id int) {
-	key := []byte(word)
-	trie.AddKey(key, id)
-}
-
-func (trie *SliceTrie) FindWord(word string) bool {
-	key := []byte(word)
-	return trie.FindKey(key)
-}
-
-func (trie *SliceTrie) MaxSegments(word string) []Token {
-	key := []rune(word)
-	return trie.MaxSegs(key)
-}
-
-func (trie *SliceTrie) MaxSegs(key []rune) []Token {
-	if len(key) <= 1 {
-		return []Token{}
+func (trie *SliceTrie) SmartTopo(tpn *TopoNode, key []byte) {
+	if len(key) <= 0 {
+		tpn.ComputeWeight()
+		if tpn.Weight > trie.MaxWeight.Weight {
+			trie.MaxWeight = tpn
+		}
+		return
 	}
-	token := []Token{}
+	curPrefixToken := trie.PrefixToken(key)
+	tLen := len(curPrefixToken)
+	if tLen <= 0 {
+		aLen := 1
+		if key[0] >= 0x80 {
+			aLen = 3
+		}
+		ntpn := NewTopoNode(aLen)
+		token := Token{key[0:aLen], 0, nil, nil}
+		ntpn.Prefix = append(tpn.Prefix, &token)
+		ntpn.PLength = append(tpn.PLength, int(aLen))
+		ntpn.EdgeNum = tpn.EdgeNum + 1
+		ntpn.Single = tpn.Single + 1
+		tpn.Childs[aLen] = ntpn
+		trie.SmartTopo(ntpn, key[aLen:])
+	}
+	for i := 0; i < tLen; i++ {
+		cLen := len(curPrefixToken[i].Text)
+		ntpn := NewTopoNode(cLen)
+		ntpn.Prefix = append(tpn.Prefix, curPrefixToken[i])
+		ntpn.PLength = append(tpn.PLength, int(cLen))
+		ntpn.EdgeNum = tpn.EdgeNum + 1
+		tpn.Childs[cLen] = ntpn
+		trie.SmartTopo(ntpn, key[cLen:])
+	}
+}
+
+func (trie *SliceTrie) SmartSegments(key []byte) []*Token {
+	topo := NewTopo()
+	trie.SmartTopo(topo.Root, key)
+	return trie.MaxWeight.Prefix
+}
+
+func (trie *SliceTrie) PrefixToken(key []byte) []*Token {
+	if len(key) <= 1 {
+		return []*Token{}
+	}
+	token := []*Token{}
 	node := trie.Root
 	if node == nil {
-		return nil
+		return []*Token{}
 	}
-	i := 0
-	path := []byte{}
-	p := []byte{0, 0, 0, 0}
-L:
-	for i = 0; i < len(key); i++ {
-		pLen := utf8.EncodeRune(p, key[i])
-		for j := 0; j < pLen; j++ {
-			childs := node.Childs
-			pos, found := trie.FindInChilds(childs, p[j])
-			if !found {
-				break L
-			}
-			node = childs[pos]
+	for i := 0; i < len(key); i++ {
+		childs := node.Childs
+		pos, found := trie.FindInChilds(childs, key[i])
+		if !found {
+			break
 		}
-		path = append(path, p[0:pLen]...)
+		node = childs[pos]
 		if node.Flag {
-			token = append(token, Token{string(path), node.ID})
+			token = append(token, node.Token)
 		}
 	}
-	token = append(token, trie.MaxSegs(key[1:])...)
 	return token
 }
 
-func (trie *SliceTrie) FindKey(key []byte) bool {
+func (trie *SliceTrie) AddSubToken(token *Token) bool {
+	key := []byte(token.Text)
 	node := trie.Root
 	if node == nil {
 		return false
 	}
-	i := 0
-	for i = 0; i < len(key); i++ {
+	for i := 0; i < len(key); i++ {
 		childs := node.Childs
 		pos, found := trie.FindInChilds(childs, key[i])
 		if !found {
@@ -98,10 +115,20 @@ func (trie *SliceTrie) FindKey(key []byte) bool {
 		}
 		node = childs[pos]
 	}
-	if i != len(key) || !node.Flag {
-		return false
+	if node.Flag {
+		node.Token.PrefixToken = trie.PrefixToken(key)
+		node.Token.SubToken = trie.SubToken(key)
+		return true
 	}
-	return true
+	return false
+}
+
+func (trie *SliceTrie) SubToken(key []byte) []*Token {
+	token := []*Token{}
+	for i := 1; i < len(key); i++ {
+		token = append(token, trie.PrefixToken(key[i:])...)
+	}
+	return token
 }
 
 //***************PRIVATE****************
@@ -147,14 +174,15 @@ func (trie *SliceTrie) FindLastMatchNode(key []byte) (*SliceTrieNode, int) {
 	return last, lastI
 }
 
-func (trie *SliceTrie) AddKey(key []byte, id int) {
+func (trie *SliceTrie) AddToken(token *Token) {
+	key := []byte(token.Text)
 	node, lastI := trie.FindLastMatchNode(key)
 	if node == nil {
 		node = trie.Root
 		lastI = 0
 	}
 	for i := lastI; i < len(key); i++ {
-		newNode := NewSliceTrieNode(key[i], -1)
+		newNode := NewSliceTrieNode(key[i])
 		clen := len(node.Childs)
 		if clen <= 0 {
 			node.Childs = append(node.Childs, newNode)
@@ -172,5 +200,5 @@ func (trie *SliceTrie) AddKey(key []byte, id int) {
 		node = newNode
 	}
 	node.Flag = true
-	node.ID = id
+	node.Token = token
 }

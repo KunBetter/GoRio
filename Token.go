@@ -2,6 +2,8 @@
 package GoRio
 
 type Token struct {
-	Text string
-	ID   int
+	Text        []byte
+	frequency   int
+	PrefixToken []*Token
+	SubToken    []*Token
 }

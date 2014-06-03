@@ -9,42 +9,19 @@ import (
 	"strings"
 )
 
-type WordReq struct {
-	Word  string
-	Resp  chan []Token
-	Smart bool
-}
-
 type GoRio struct {
 	DicFilesName []string
 	ForwardTrie  *SliceTrie
-	Req          chan *WordReq
-	WordCount    int
+	Tokens       []*Token
 }
 
 func GoRior() *GoRio {
 	rio := &GoRio{
 		DicFilesName: []string{},
 		ForwardTrie:  NewSliceTrie(),
-		Req:          make(chan *WordReq, 100),
-		WordCount:    1,
+		Tokens:       []*Token{},
 	}
-	go rio.Process()
 	return rio
-}
-
-func (rio *GoRio) Process() {
-	for {
-		select {
-		case ws := <-rio.Req:
-			go func(ws *WordReq) {
-				if !ws.Smart {
-					tokens := rio.MaxSegments(ws.Word)
-					ws.Resp <- tokens
-				}
-			}(ws)
-		}
-	}
 }
 
 func (rio *GoRio) SetDicFilesName(fn []string) {
@@ -59,20 +36,45 @@ func (rio *GoRio) Start() {
 	for _, fn := range rio.DicFilesName {
 		rio.LoadDicFiles(fn)
 	}
-}
-
-func (rio *GoRio) CutWord(word string, smart bool) []Token {
-	ws := &WordReq{
-		Word:  word,
-		Resp:  make(chan []Token),
-		Smart: smart,
+	for _, token := range rio.Tokens {
+		rio.ForwardTrie.AddToken(token)
 	}
-	rio.Req <- ws
-	return <-ws.Resp
+	//PreProcess
+	for _, token := range rio.Tokens {
+		rio.ForwardTrie.AddSubToken(token)
+	}
 }
 
-func (rio *GoRio) MaxSegments(word string) []Token {
-	return rio.ForwardTrie.MaxSegments(word)
+func (rio *GoRio) AddWord(word []byte) {
+	tk := &Token{Text: word, frequency: 0}
+	rio.ForwardTrie.AddToken(tk)
+	rio.ForwardTrie.AddSubToken(tk)
+}
+
+func (rio *GoRio) Tokens2String(tokens []*Token) []string {
+	ws := []string{}
+	for _, tk := range tokens {
+		ws = append(ws, string(tk.Text))
+	}
+	return ws
+}
+
+func (rio *GoRio) CutWord(word []byte, smart bool) []*Token {
+	tk := []*Token{}
+	tokens := rio.ForwardTrie.SmartSegments(word)
+	for _, v := range tokens {
+		if smart {
+			tk = append(tk, v)
+		} else {
+			if v.PrefixToken != nil {
+				tk = append(tk, v.PrefixToken...)
+				tk = append(tk, v.SubToken...)
+			} else {
+				tk = append(tk, v)
+			}
+		}
+	}
+	return tk
 }
 
 func Reverse(s string) string {
@@ -81,11 +83,6 @@ func Reverse(s string) string {
 		runes[i], runes[j] = runes[j], runes[i]
 	}
 	return string(runes)
-}
-
-func (rio *GoRio) AddWork(word string) {
-	rio.ForwardTrie.AddWord(word, rio.WordCount)
-	rio.WordCount++
 }
 
 func (rio *GoRio) LoadDicFiles(fn string) {
@@ -99,7 +96,8 @@ func (rio *GoRio) LoadDicFiles(fn string) {
 				break
 			}
 			line = strings.TrimRight(line, "\r\n")
-			rio.AddWork(line)
+			rio.Tokens = append(rio.Tokens,
+				&Token{Text: []byte(line), frequency: 0})
 		}
 	}
 }
