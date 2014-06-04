@@ -27,22 +27,12 @@ func main() {
 	rio := GoRio.GoRior()
 	rio.SetDicFilesName([]string{"../dic/words.txt"})
 	rio.Start()
-	ws := []byte("中华人民共和国")
-	startT := time.Now()
-	for i := 0; i < 10000; i++ {
-		rio.CutWord(ws, false)
-	}
+	ws := []byte("广东联通将联合百度推出跨界互联网金融理财产品")
+	//max segments
 	tokens := rio.CutWord(ws, false)
-	TimeConsumed := float64(time.Now().UnixNano()-startT.UnixNano()) / 1e9
-	fmt.Printf("TimeConsumed: %f s.\n", TimeConsumed)
-	fmt.Printf("tokens:%v.\n", rio.Tokens2String(tokens))
-	startT = time.Now()
-	for i := 0; i < 10000; i++ {
-		rio.CutWord(ws, true)
-	}
-	TimeConsumed = float64(time.Now().UnixNano()-startT.UnixNano()) / 1e9
-	fmt.Printf("TimeConsumed: %f s.\n", TimeConsumed)
+	fmt.Printf("max tokens:%v.\n", tokens)
+	//smart segments
 	tokens = rio.CutWord(ws, true)
-	fmt.Printf("tokens:%v.\n", rio.Tokens2String(tokens))
+	fmt.Printf("smart tokens:%v.\n", tokens)
 }
 ```
