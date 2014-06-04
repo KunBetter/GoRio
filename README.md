@@ -9,7 +9,7 @@ $GOPATH/bin/GoRio
 
 Smart Word Segmentation
 -----
-1.Segmentation result set is as small as possible.
+1.Segmentation result set is as small as possible.  
 2.Result set is as little as single words.
 
 Usage
