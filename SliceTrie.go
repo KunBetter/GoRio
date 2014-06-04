@@ -55,7 +55,6 @@ func (trie *SliceTrie) SmartTopo(tpn *TopoNode, key []byte) {
 		ntpn := NewTopoNode(aLen)
 		token := Token{key[0:aLen], 0, nil, nil}
 		ntpn.Prefix = append(tpn.Prefix, &token)
-		ntpn.PLength = append(tpn.PLength, int(aLen))
 		ntpn.EdgeNum = tpn.EdgeNum + 1
 		ntpn.Single = tpn.Single + 1
 		tpn.Childs[aLen] = ntpn
@@ -65,7 +64,6 @@ func (trie *SliceTrie) SmartTopo(tpn *TopoNode, key []byte) {
 		cLen := len(curPrefixToken[i].Text)
 		ntpn := NewTopoNode(cLen)
 		ntpn.Prefix = append(tpn.Prefix, curPrefixToken[i])
-		ntpn.PLength = append(tpn.PLength, int(cLen))
 		ntpn.EdgeNum = tpn.EdgeNum + 1
 		tpn.Childs[cLen] = ntpn
 		trie.SmartTopo(ntpn, key[cLen:])
@@ -116,19 +114,25 @@ func (trie *SliceTrie) AddSubToken(token *Token) bool {
 		node = childs[pos]
 	}
 	if node.Flag {
-		node.Token.PrefixToken = trie.PrefixToken(key)
-		node.Token.SubToken = trie.SubToken(key)
+		node.Token.SubToken, node.Token.SubPos = trie.SubToken(key)
 		return true
 	}
 	return false
 }
 
-func (trie *SliceTrie) SubToken(key []byte) []*Token {
+func (trie *SliceTrie) SubToken(key []byte) ([]*Token, []int) {
 	token := []*Token{}
-	for i := 1; i < len(key); i++ {
-		token = append(token, trie.PrefixToken(key[i:])...)
+	pos := []int{}
+	for i := 0; i < len(key); i++ {
+		ptks := trie.PrefixToken(key[i:])
+		if len(ptks) > 0 {
+			for _, v := range ptks {
+				token = append(token, v)
+				pos = append(pos, i)
+			}
+		}
 	}
-	return token
+	return token, pos
 }
 
 //***************PRIVATE****************

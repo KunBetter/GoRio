@@ -46,32 +46,31 @@ func (rio *GoRio) Start() {
 }
 
 func (rio *GoRio) AddWord(word []byte) {
-	tk := &Token{Text: word, frequency: 0}
+	tk := &Token{word, 0, nil, nil}
 	rio.ForwardTrie.AddToken(tk)
 	rio.ForwardTrie.AddSubToken(tk)
 }
 
-func (rio *GoRio) Tokens2String(tokens []*Token) []string {
-	ws := []string{}
-	for _, tk := range tokens {
-		ws = append(ws, string(tk.Text))
-	}
-	return ws
-}
-
-func (rio *GoRio) CutWord(word []byte, smart bool) []*Token {
-	tk := []*Token{}
-	tokens := rio.ForwardTrie.SmartSegments(word)
-	for _, v := range tokens {
-		if smart {
-			tk = append(tk, v)
-		} else {
-			if v.PrefixToken != nil {
-				tk = append(tk, v.PrefixToken...)
-				tk = append(tk, v.SubToken...)
+func (rio *GoRio) CutWord(word []byte, smart bool) []Segs {
+	tk := []Segs{}
+	offset := 0
+	if smart {
+		tokens := rio.ForwardTrie.SmartSegments(word)
+		for _, v := range tokens {
+			tk = append(tk, Segs{string(v.Text), offset})
+			offset += len(v.Text)
+		}
+	} else {
+		tokens := rio.ForwardTrie.SmartSegments(word)
+		for _, v := range tokens {
+			if v.SubToken != nil {
+				for i, st := range v.SubToken {
+					tk = append(tk, Segs{string(st.Text), v.SubPos[i] + offset})
+				}
 			} else {
-				tk = append(tk, v)
+				tk = append(tk, Segs{string(v.Text), offset})
 			}
+			offset += len(v.Text)
 		}
 	}
 	return tk
@@ -97,7 +96,7 @@ func (rio *GoRio) LoadDicFiles(fn string) {
 			}
 			line = strings.TrimRight(line, "\r\n")
 			rio.Tokens = append(rio.Tokens,
-				&Token{Text: []byte(line), frequency: 0})
+				&Token{[]byte(line), 0, nil, nil})
 		}
 	}
 }

@@ -6,7 +6,6 @@ type TopoNode struct {
 	Childs  map[int]*TopoNode
 	Weight  int
 	Prefix  []*Token
-	PLength []int
 	EdgeNum int
 	Single  int
 }
@@ -17,7 +16,6 @@ func NewTopoNode(key int) *TopoNode {
 		Childs:  make(map[int]*TopoNode),
 		Weight:  0,
 		Prefix:  []*Token{},
-		PLength: []int{},
 		EdgeNum: 0,
 		Single:  0,
 	}
@@ -26,9 +24,9 @@ func NewTopoNode(key int) *TopoNode {
 
 func (tn *TopoNode) ComputeWeight() {
 	tn.Weight = (10000-tn.EdgeNum*10)*10 - tn.Single*200
-	pLen := len(tn.PLength)
+	pLen := len(tn.Prefix)
 	for i := 0; i < pLen; i++ {
-		tn.Weight += tn.PLength[i] * (3000 - i*30)
+		tn.Weight += len(tn.Prefix[i].Text) * (3000 - i*30)
 	}
 }
 
